@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// JUL BLOCKTEAM PACA 2021-22
+// JUL BLOCKTEAM PACA 2021 
 pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
@@ -19,7 +19,7 @@ contract Eny_Token is ERC20 {
     
 
 //    address ENYWalletSupply     = 0x2B6d5d6A6f588084dC9565ffA1b7f28fe60D479E;
-    address ENYWalletSupply     = 0xdD870fA1b7C4700F2BD7f44238821C26f7392148;
+    address ENYWalletSupply     = 0xF5b2cA7FD2659CB37E95b142836Ef5C9750bF4Db;
 
     constructor() ERC20("En Y toktok", "ENYt") {
         owner = msg.sender;

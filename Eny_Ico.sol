@@ -2,22 +2,14 @@
 // JUL BLOCKTEAM PACA 2021 
 pragma solidity ^0.8.0;
 
-//  REM :
-//  timed crowdsale ?       => oui 
-//  refundable ?            => oui, a partir du tokenContract par le Gnosis/admin?
-//  not minted              => 
-//  capped by the tokenIco supply (constructor)
-//  Ajouter FallBack sur receive qui call buyTokens
 
 /*
     USAGE
-        * deploy a ERC20Token 
         * create / launch Safe Wallet for putting ICO Token supply and ICO funds 
-        * send ICO Token supply to this Wallet Safe (using setIcoSupply() )
+        * deploy a ERC20Token (with SafeWallet address in constructor)
         * deploy ENYTokenICO
         * Wallet Safe must approve ICO Contract for supply amount
         * use launchIco function 
-            => 
 */
 
 
@@ -28,6 +20,7 @@ interface IToken {
     function transferFrom(address, address, uint256) external returns (bool);
     function approve(address, uint256) external returns (bool);
     function decimals() external returns (uint256);
+    
 }
 
 
@@ -46,15 +39,6 @@ contract ENYTokenICO_test {
     uint256  private tokenDecimals;     // Token Contract decimals
     uint256  public IcoBalance;         // ICO balance
     
-    
-    
-
-    
-//    mapping(address => uint) public  IcoBalance;                                 // Getter for ICO balance (?)
-    
-    
-//    uint256  public garb;                                                     // display garbage data for testing purpose
-
     enum icoStates {WAITING, STARTED, ENDED, STOPPED}
     icoStates public icoState = icoStates.WAITING;  // statut ICO 
     
@@ -65,6 +49,8 @@ contract ENYTokenICO_test {
     }
     Buyers[] icoInvestors;                                                      // investors data 
     
+    Buyers[] public directInvestors;                                                   // Direct FallBack investors
+    
     address payable refundBuyer;
     
 
@@ -72,6 +58,7 @@ contract ENYTokenICO_test {
         EVENTS For the Front
     */
     event Sell(address _buyer, uint256 _tokens, uint256 _totalBalance, uint256 _totalInvestor, uint256 _tokenLeft);
+    event directSell(address _buyer, uint256 _amount, bytes _data);
 
     /*  ************************************************************************
         modifyers 
@@ -98,56 +85,21 @@ contract ENYTokenICO_test {
                         
         require(icoState == icoStates.WAITING, "Sorry, this ICO stage already started");                                
         // voir avec Gnosis pour admin de ICO
-        admin           = _walletSafe;
-        tokenPrice      = _tokenPrice;
-        tokenIcoSupply        = _tokenIcoSupply;
-        tokensIcoTimeOut= _icoStart + multiply(_icoDurationDay,86400);
-        //tokensIcoTimeOut= _icoStart + multiply(_icoDurationMinute,60);         // en minutes pour les tests
-        tokenIcoStart   = _icoStart;
-        tokenLeft       = tokenIcoSupply;
-        tokenContract   = _tokenContract;
-        tokenDecimals   = decimalsToken(_tokenContract);
-        
+        admin               = _walletSafe;
+        tokenPrice          = _tokenPrice;
+        tokenIcoSupply      = _tokenIcoSupply/(10**18);                             // human readable (at least jm readable)
+        tokensIcoTimeOut    = _icoStart + multiply(_icoDurationDay,86400);
+        //tokensIcoTimeOut  = _icoStart + multiply(_icoDurationMinute,60);         // en minutes pour les tests
+        tokenIcoStart       = _icoStart;
+        tokenLeft           = tokenIcoSupply;
+        tokenContract       = _tokenContract;
+        tokenDecimals       = decimalsToken(_tokenContract);
 
         setIcoStatus();
     }
 
 
-    /*  ************************************************************************
-        ACHAT DE TOKEN par saisie nb de Token
-    */
-/*    
-    function buyTokens(uint256 _numberOfTokens) payable external{
-
-        setIcoStatus();
-
-        require(_numberOfTokens >0,"Sorry, no token in your basket");
-        require(icoState == icoStates.STARTED, "Sorry, this ICO stage is currently closed");
-
-        uint256 totalNet;
-        totalNet = multiply(_numberOfTokens,tokenPrice);
-        
-        // test si sufficient funds (confiance en metamask et autres?=>non)
-        require(address(msg.sender).balance >= totalNet, "Sorry, insufficient funds...");
-        require(msg.value >= totalNet, "Sorry, no sufficient value ");
-        
-        // liraison du total demandé seulement ou du max disponible si demande > ?
-        require(tokenLeft >= _numberOfTokens, "Not enough token to sell !");
-
-        icoInvestors.push(Buyers(msg.sender, _numberOfTokens, msg.value));
-        tokensSold += _numberOfTokens;
-        tokenLeft -= _numberOfTokens;
-        
-        
-        // transfer vers le buyer (non remboursable)
-        withDraw(_numberOfTokens);
-        
-
-        // Event pour le front
-        emit Sell(msg.sender, _numberOfTokens, address(this).balance, icoInvestors.length, tokenLeft);
-    }
-*/    
-    /*  ************************************************************************
+     /*  ************************************************************************
         ACHAT DE TOKEN par la value
     */
     function buyAmountTokens() payable public{
@@ -175,6 +127,7 @@ contract ENYTokenICO_test {
         tokenLeft -= numberOfTokens;
         
         withDraw(numberOfTokens);                                                                       // transfer vers le buyer (non remboursable)
+//        transferTokenFrom(tokenContract, admin, msg.sender, numberOfTokens*(10**18));
         IcoBalance += totalNet;
         
         emit Sell(msg.sender, numberOfTokens, address(this).balance, icoInvestors.length, tokenLeft );  // Event pour le front
@@ -187,10 +140,11 @@ contract ENYTokenICO_test {
         withdraw
     */
         function withDraw(uint256 _numberOfTokens) internal{
-//            garb =  IToken(tokenContract).balanceOf(msg.sender);
             transferTokenFrom(tokenContract, admin, msg.sender, _numberOfTokens*(10**18));
+
     }
 
+    
     /*  ************************************************************************
         MAJ status ICO 
         mettre en modifyer => buyTokens
@@ -205,7 +159,7 @@ contract ENYTokenICO_test {
         appel interface sur Token ERC20 
     */
     function transferTokenFrom(address _tokenContract, address _from, address _to, uint256 _amount) internal returns (bool){
-            IcoBalance = balanceToken(_tokenContract);
+//            IcoBalance = balanceToken(_tokenContract);
             return IToken(_tokenContract).transferFrom(_from, _to, _amount);
     }
     function transferToken(address _tokenContract, address _to, uint256 _amount) internal returns (bool){
@@ -223,13 +177,10 @@ contract ENYTokenICO_test {
         FORCE FIN ICO (MANUELLEMENT)
     */
     function endSale() public payable onlyAdmin{
-//        require(msg.sender == admin);
         require(icoState != icoStates.STOPPED, " ICO already STOPPED ...");
 
-        // change state before transfer (anti re entrance)
-        // Just transfer the balance to the admin
-        // on peut modifier le TimeOut a block.timestamp
-        icoState = icoStates.STOPPED;
+        
+        icoState = icoStates.STOPPED;                                               // change state before transfer
         admin.transfer(address(this).balance);                                      // transfer de la balance vers le Wallet Safe
         IcoBalance = address(this).balance;                                         // update balance ICO contract
         IToken(tokenContract).approve(address(this), 0);                            // RAZ allowance = disaprove this ICO = set allowance to 0 
@@ -255,21 +206,24 @@ contract ENYTokenICO_test {
 
     /*  ************************************************************************
         FallBack & receive
+        fallback OK
     */
     fallback() external payable { 
-//        buyAmountTokens(); 
-//        IToken(tokenContract).transferFrom(admin, msg.sender, ( (msg.value*(10**18)) /tokenPrice));
+        directInvestors.push(Buyers(msg.sender,(msg.value*(10**18) /tokenPrice), msg.value));
+        IToken(tokenContract).transferFrom(admin, msg.sender, ( (msg.value*(10**18)) /tokenPrice));
+        emit directSell(msg.sender, msg.value, msg.data);
     }
     receive() external payable { 
-//        buyAmountTokens();
+
         uint256 numberOfTokens;
         numberOfTokens = msg.value / tokenPrice;                                                        // calcul nb de token en fonction de la value
         if (numberOfTokens > tokenLeft) { numberOfTokens = tokenLeft;}                                  // livraison des tokens disponibles
         icoInvestors.push(Buyers(msg.sender,numberOfTokens, msg.value));
         tokensSold += numberOfTokens;
         tokenLeft -= numberOfTokens;
-        
-        withDraw(numberOfTokens);                                                                       // transfer vers le buyer (non remboursable)
+
+        directInvestors.push(Buyers(msg.sender,numberOfTokens, msg.value));
+
         IcoBalance += msg.value;
         IToken(tokenContract).transferFrom(admin, msg.sender, ( (msg.value*(10**18)) /tokenPrice));
         
