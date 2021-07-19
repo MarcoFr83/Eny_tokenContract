@@ -28,7 +28,6 @@ interface IToken {
     function transferFrom(address, address, uint256) external returns (bool);
     function approve(address, uint256) external returns (bool);
     function decimals() external returns (uint256);
-    
 }
 
 
