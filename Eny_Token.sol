@@ -18,10 +18,9 @@ contract Eny_Token is ERC20 {
     address owner4  = 0xfE4ED255e80F62b01E15AAFA9e581660230BbEB8;       // y
     
 
-//    address ENYWalletSupply     = 0x2B6d5d6A6f588084dC9565ffA1b7f28fe60D479E;
-    address ENYWalletSupply     = 0xF5b2cA7FD2659CB37E95b142836Ef5C9750bF4Db;
+    address ENYWalletSupply     = 0x2B6d5d6A6f588084dC9565ffA1b7f28fe60D479E;
 
-    constructor() ERC20("En Y toktok", "ENYt") {
+    constructor() ERC20("En Y le sang!", "ENYt") {
         owner = msg.sender;
         _mint(owner1, supplyByFounder);
         _mint(owner2, supplyByFounder);
